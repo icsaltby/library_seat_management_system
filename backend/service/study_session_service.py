@@ -108,6 +108,8 @@ def return_study_session(user, study_session_id):
     study_session.status = "released"
     study_session.end_at = now
     study_session.seat.status = "free"
+    if study_session.reservation:
+        study_session.reservation.status = "completed"
     violation = Violation(
         user_id=user.id,
         seat_id=study_session.seat_id,
@@ -140,6 +142,8 @@ def release_study_session(user, study_session_id):
     study_session.status = "released"
     study_session.end_at = now
     study_session.seat.status = "free"
+    if study_session.reservation:
+        study_session.reservation.status = "completed"
     db.session.commit()
     return study_session_to_dict(study_session)
 
@@ -183,6 +187,8 @@ def check_timeouts():
             study_session.status = "released"
             study_session.end_at = now
             study_session.seat.status = "free"
+            if study_session.reservation:
+                study_session.reservation.status = "completed"
             db.session.add(
                 Violation(
                     user_id=study_session.user_id,
