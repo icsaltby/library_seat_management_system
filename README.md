@@ -62,7 +62,7 @@ frontend/
 首次运行、修改模型后、或需要恢复演示数据时执行：
 
 ```powershell
-cd /d "F:\3d\Information System Analysis and Design\lab\code\backend"
+cd /d "当前目录\backend"
 .\.venv\Scripts\python.exe reset_db.py
 ```
 
@@ -78,7 +78,7 @@ cd /d "F:\3d\Information System Analysis and Design\lab\code\backend"
 ## 后端启动命令
 
 ```powershell
-cd /d "F:\3d\Information System Analysis and Design\lab\code\backend"
+cd /d "当前目录\backend"
 .\.venv\Scripts\python.exe app.py
 ```
 
@@ -93,7 +93,7 @@ http://127.0.0.1:5000
 本机 PowerShell 的 npm 可能有执行策略限制，建议使用 cmd 的 npm：
 
 ```powershell
-cd /d "F:\3d\Information System Analysis and Design\lab\code\frontend"
+cd /d "当前目录\frontend"
 cmd /c npm run dev
 ```
 
@@ -137,7 +137,7 @@ Area B：B-001 至 B-010
 Area C：C-001 至 C-010
 ```
 
-前端“座位地图”页面中也提供了“座位编号对应图”，方便课堂演示时说明座位区域、排号和列号的对应关系。
+前端“座位地图”页面中也提供了“座位编号对应图”，说明座位区域、排号和列号的对应关系。
 
 ## 核心演示流程
 
@@ -157,24 +157,4 @@ Area C：C-001 至 C-010
 14. 打开“违约管理”，将违约记录标记为已处理。
 15. 打开“开放时间”，修改开放规则或手动检查超时。
 
-## 关闭项目
-
-建议先关闭前端，再关闭后端。分别在对应终端按：
-
-```text
-Ctrl + C
-```
-
-如果终端提示：
-
-```text
-Terminate batch job (Y/N)?
-```
-
-输入：
-
-```text
-Y
-```
-
-然后回车。
+关闭项目时建议先关闭前端，再关闭后端。
