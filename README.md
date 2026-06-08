@@ -90,7 +90,7 @@ http://127.0.0.1:5000
 
 ## 前端启动命令
 
-本机 PowerShell 的 npm 可能有执行策略限制，建议使用 cmd 的 npm：
+PS 的 npm 可能有执行策略限制，建议使用 cmd 的 npm：
 
 ```powershell
 cd /d "当前目录\frontend"
