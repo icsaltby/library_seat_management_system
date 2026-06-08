@@ -9,6 +9,7 @@ from controller.admin_seat_controller import admin_seat_bp
 from controller.admin_timeout_controller import admin_timeout_bp
 from controller.auth_controller import auth_bp
 from controller.health_controller import health_bp
+from controller.open_time_controller import open_time_bp
 from controller.reservation_controller import reservation_bp
 from controller.report_controller import report_bp
 from controller.seat_controller import seat_bp
@@ -29,6 +30,7 @@ def create_app():
     db.init_app(app)
 
     app.register_blueprint(health_bp, url_prefix="/api")
+    app.register_blueprint(open_time_bp, url_prefix="/api")
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(seat_bp, url_prefix="/api/seats")
     app.register_blueprint(reservation_bp, url_prefix="/api/reservations")

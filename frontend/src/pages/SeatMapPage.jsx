@@ -19,6 +19,10 @@ import api, { getErrorMessage } from "../api/client.js";
 
 const { Title, Text } = Typography;
 const TIME_FORMAT = "HH:mm";
+const DEFAULT_OPEN_TIME_CONFIG = {
+  open_time: "08:00",
+  close_time: "22:00",
+};
 
 const zh = {
   title: "\u5ea7\u4f4d\u5730\u56fe",
@@ -44,6 +48,7 @@ const zh = {
   confirm: "\u786e\u8ba4",
   reserveSuccessPrefix: "\u5df2\u9884\u7ea6",
   signBefore: "\u8bf7\u5728\u6b64\u65f6\u95f4\u524d\u7b7e\u5230",
+  endAfterStart: "\u7ed3\u675f\u65f6\u95f4\u5fc5\u987b\u665a\u4e8e\u5f00\u59cb\u65f6\u95f4\u3002",
 };
 
 const statusInfo = {
@@ -54,12 +59,21 @@ const statusInfo = {
   disabled: { label: zh.disabled, className: "seat-disabled", badge: "default" },
 };
 
+function toTodayTime(value) {
+  const [hour, minute] = String(value || "").split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null;
+  }
+  return dayjs().hour(hour).minute(minute).second(0).millisecond(0);
+}
+
 function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
   const [seats, setSeats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [reservingSeatId, setReservingSeatId] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
+  const [openTimeConfig, setOpenTimeConfig] = useState(DEFAULT_OPEN_TIME_CONFIG);
   const [form] = Form.useForm();
 
   async function loadSeats() {
@@ -74,8 +88,18 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
     }
   }
 
+  async function loadOpenTimeConfig() {
+    try {
+      const response = await api.get("/open-time-config");
+      setOpenTimeConfig(response.data.data || DEFAULT_OPEN_TIME_CONFIG);
+    } catch (error) {
+      message.error(getErrorMessage(error));
+    }
+  }
+
   useEffect(() => {
     loadSeats();
+    loadOpenTimeConfig();
     const timer = window.setInterval(loadSeats, 10000);
     return () => window.clearInterval(timer);
   }, [refreshFlag]);
@@ -112,7 +136,9 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
 
   function openReserveModal(seat) {
     const startTime = dayjs().add(10, "minute");
-    const endTime = startTime.add(2, "hour");
+    const closeTime = toTodayTime(openTimeConfig.close_time) || toTodayTime(DEFAULT_OPEN_TIME_CONFIG.close_time);
+    const defaultEndTime = startTime.add(2, "hour");
+    const endTime = defaultEndTime.isAfter(closeTime) ? closeTime : defaultEndTime;
     setSelectedSeat(seat);
     form.setFieldsValue({
       start_time: startTime,
@@ -262,7 +288,19 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
           <Form.Item
             label={zh.endTime}
             name="end_time"
-            rules={[{ required: true, message: zh.endRequired }]}
+            dependencies={["start_time"]}
+            rules={[
+              { required: true, message: zh.endRequired },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  const startTime = getFieldValue("start_time");
+                  if (!value || !startTime || value.isAfter(startTime)) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error(zh.endAfterStart));
+                },
+              }),
+            ]}
           >
             <TimePicker format={TIME_FORMAT} minuteStep={5} className="full-width" />
           </Form.Item>

@@ -31,7 +31,11 @@ const zh = {
 };
 
 function toTimeValue(value) {
-  return value ? dayjs(value, TIME_FORMAT) : null;
+  const [hour, minute] = String(value || "").split(":").map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null;
+  }
+  return dayjs().hour(hour).minute(minute).second(0).millisecond(0);
 }
 
 function AdminOpenTimePage() {
