@@ -8,6 +8,44 @@ from model import LeaveRecord, Violation, db
 from utils.errors import BusinessError
 
 
+def auto_release_expired_study_sessions():
+    now = datetime.now()
+    release_count = 0
+
+    from model import StudySession
+
+    active_sessions = StudySession.query.filter(StudySession.status.in_(["using", "leaving"])).all()
+    for study_session in active_sessions:
+        reservation = study_session.reservation
+        if not reservation or not reservation.end_time:
+            continue
+
+        scheduled_end_at = datetime.combine(reservation.reserved_at.date(), reservation.end_time)
+        if now < scheduled_end_at:
+            continue
+
+        active_leave = find_active_leave_by_session(study_session.id)
+        if active_leave:
+            active_leave.return_at = scheduled_end_at
+            active_leave.duration_minutes = max(
+                0,
+                int((scheduled_end_at - active_leave.leave_at).total_seconds() // 60),
+            )
+            active_leave.status = "released"
+
+        study_session.status = "released"
+        study_session.end_at = scheduled_end_at
+        if study_session.seat and study_session.seat.status != "disabled":
+            study_session.seat.status = "free"
+        reservation.status = "completed"
+        release_count += 1
+
+    if release_count:
+        db.session.commit()
+
+    return release_count
+
+
 def _leave_to_dict(leave_record):
     if not leave_record:
         return None
@@ -48,6 +86,7 @@ def study_session_to_dict(study_session):
 
 
 def get_my_current_session(user):
+    auto_release_expired_study_sessions()
     study_session = find_current_session_by_user(user.id)
     if not study_session:
         return None
@@ -150,6 +189,7 @@ def release_study_session(user, study_session_id):
 
 def check_timeouts():
     now = datetime.now()
+    auto_release_count = auto_release_expired_study_sessions()
     reservation_timeout_count = 0
     leave_timeout_count = 0
 
@@ -203,6 +243,7 @@ def check_timeouts():
 
     db.session.commit()
     return {
+        "auto_release_count": auto_release_count,
         "reservation_timeout_count": reservation_timeout_count,
         "leave_timeout_count": leave_timeout_count,
     }

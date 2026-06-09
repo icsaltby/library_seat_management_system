@@ -22,6 +22,8 @@ namespace 表现层_React页面 {
   }
   class SeatMapPage {
     +loadSeats()
+    +loadOpenTimeConfig()
+    +loadSeatReservationPeriods(seatId)
     +openReserveModal(seat)
     +closeReserveModal()
     +handleReserve()
@@ -72,6 +74,10 @@ namespace 控制层_FlaskController {
   }
   class SeatController {
     +list_seats()
+    +list_seat_reservations(seat_id)
+  }
+  class OpenTimeController {
+    +get_public_open_time_config()
   }
   class ReservationController {
     +reserve_seat()
@@ -122,6 +128,7 @@ namespace 业务层_Service {
   }
   class SeatService {
     +get_seat_list()
+    +get_seat_reservation_periods(seat_id, date_text)
   }
   class ReservationService {
     +create_reservation(user, data)
@@ -129,6 +136,7 @@ namespace 业务层_Service {
     +checkin_reservation(user, reservation_id)
   }
   class StudySessionService {
+    +auto_release_expired_study_sessions()
     +get_my_current_session(user)
     +leave_study_session(user, study_session_id)
     +return_study_session(user, study_session_id)
@@ -181,7 +189,8 @@ namespace 数据访问层_DAO {
     +find_reservation_by_id(reservation_id)
     +find_active_reservation_by_user(user_id)
     +find_active_reservation_by_seat(seat_id)
-    +find_conflicting_reservation(seat_id, start_time, end_time)
+    +find_conflicting_reservation(seat_id, start_time, end_time, target_date)
+    +find_effective_reservations_by_seat_and_date(seat_id, target_date)
     +save_reservation(reservation)
   }
   class StudySessionDAO {
@@ -229,6 +238,7 @@ App --> AdminOpenTimePage
 LoginPage --> AuthController
 RegisterPage --> AuthController
 SeatMapPage --> SeatController
+SeatMapPage --> OpenTimeController
 SeatMapPage --> ReservationController
 MyReservationPage --> ReservationController
 CurrentSeatPage --> StudySessionController
@@ -242,6 +252,7 @@ AdminOpenTimePage --> AdminTimeoutController
 
 AuthController --> AuthService
 SeatController --> SeatService
+OpenTimeController --> OpenTimeConfigService
 ReservationController --> ReservationService
 StudySessionController --> StudySessionService
 ReportController --> ReportService
@@ -252,10 +263,13 @@ AdminTimeoutController --> StudySessionService
 
 AuthService --> UserDAO
 SeatService --> SeatDAO
+SeatService --> ReservationDAO
+SeatService --> StudySessionService
 ReservationService --> ReservationDAO
 ReservationService --> SeatDAO
 ReservationService --> StudySessionDAO
 ReservationService --> OpenTimeConfigDAO
+ReservationService --> StudySessionService
 StudySessionService --> StudySessionDAO
 StudySessionService --> LeaveRecordDAO
 StudySessionService --> OpenTimeConfigDAO
@@ -388,6 +402,8 @@ flowchart TB
   LoginPage["登录页"] --> AuthAPI["POST /api/auth/login"]
   RegisterPage["注册页"] --> RegisterAPI["POST /api/auth/register"]
   SeatMapPage["座位地图"] --> SeatAPI["GET /api/seats"]
+  SeatMapPage --> SeatReservationAPI["GET /api/seats/{seat_id}/reservations?date=YYYY-MM-DD"]
+  SeatMapPage --> PublicOpenTimeAPI["GET /api/open-time-config"]
   SeatMapPage --> ReserveAPI["POST /api/reservations"]
   MyReservationPage["我的预约"] --> MyReservationAPI["GET /api/reservations/me"]
   MyReservationPage --> CheckinAPI["POST /api/reservations/{id}/checkin"]

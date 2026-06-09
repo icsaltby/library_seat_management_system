@@ -15,7 +15,7 @@ from dao.study_session_dao import (
 )
 from model import CheckInRecord, Reservation, StudySession, Violation, db
 from service.open_time_config_service import format_hhmm, parse_hhmm
-from service.study_session_service import study_session_to_dict
+from service.study_session_service import auto_release_expired_study_sessions, study_session_to_dict
 from utils.errors import BusinessError
 
 
@@ -35,7 +35,15 @@ def _reservation_to_dict(reservation):
     }
 
 
+def _time_ranges_overlap(start_time, end_time, existing_start_time, existing_end_time):
+    if not existing_start_time or not existing_end_time:
+        return True
+    return start_time < existing_end_time and end_time > existing_start_time
+
+
 def create_reservation(user, data):
+    auto_release_expired_study_sessions()
+
     seat_id = data.get("seat_id")
     if not seat_id:
         raise BusinessError("seat_id is required.")
@@ -70,9 +78,15 @@ def create_reservation(user, data):
         raise BusinessError("You already have an active study session.")
 
     # The same seat cannot have overlapping active reservations.
-    if find_conflicting_reservation(seat.id, start_time, end_time):
+    if find_conflicting_reservation(seat.id, start_time, end_time, now.date()):
         raise BusinessError("Seat already has a reservation in this time period.")
-    if find_active_session_by_seat(seat.id):
+    active_seat_session = find_active_session_by_seat(seat.id)
+    if active_seat_session and _time_ranges_overlap(
+        start_time,
+        end_time,
+        active_seat_session.reservation.start_time if active_seat_session.reservation else None,
+        active_seat_session.reservation.end_time if active_seat_session.reservation else None,
+    ):
         raise BusinessError("Seat is currently in use.")
 
     sign_deadline = datetime.combine(now.date(), start_time) + timedelta(minutes=config.sign_limit)
@@ -111,6 +125,8 @@ def get_my_active_reservation(user):
 
 
 def checkin_reservation(user, reservation_id):
+    auto_release_expired_study_sessions()
+
     reservation = find_reservation_by_id(reservation_id)
     if not reservation:
         raise BusinessError("Reservation does not exist.", 404)
@@ -125,7 +141,16 @@ def checkin_reservation(user, reservation_id):
     if not seat or not seat.is_enabled:
         raise BusinessError("Seat is disabled.")
     active_seat_session = find_active_session_by_seat(seat.id)
-    if active_seat_session:
+    if (
+        active_seat_session
+        and active_seat_session.reservation_id != reservation.id
+        and _time_ranges_overlap(
+            reservation.start_time,
+            reservation.end_time,
+            active_seat_session.reservation.start_time if active_seat_session.reservation else None,
+            active_seat_session.reservation.end_time if active_seat_session.reservation else None,
+        )
+    ):
         raise BusinessError("Seat is currently in use.")
 
     now = datetime.now()

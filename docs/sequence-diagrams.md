@@ -52,8 +52,11 @@ sequenceDiagram
     participant SeatMapPage as 座位地图 SeatMapPage
     participant Axios as Axios 请求封装
     participant Auth as 登录校验 login_required
+    participant SeatController as SeatController
+    participant SeatService as SeatService
     participant ReservationController as ReservationController
     participant ReservationService as ReservationService
+    participant StudySessionService as StudySessionService
     participant OpenTimeDAO as OpenTimeConfigDAO
     participant SeatDAO as SeatDAO
     participant ReservationDAO as ReservationDAO
@@ -62,15 +65,38 @@ sequenceDiagram
 
     User->>SeatMapPage: 查看座位地图
     SeatMapPage->>Axios: GET /api/seats
+    Axios->>SeatController: 请求座位列表
+    SeatController->>SeatService: get_seat_list()
+    SeatService->>StudySessionService: auto_release_expired_study_sessions()
+    StudySessionService->>DB: 自动释放超过预约结束时间的学习会话
+    DB-->>StudySessionService: 更新 StudySession/Reservation/Seat
+    StudySessionService-->>SeatService: 返回自动释放数量
+    SeatService-->>SeatController: 返回按当前时间计算后的座位状态
+    SeatController-->>Axios: 返回统一成功 JSON
     Axios-->>SeatMapPage: 返回座位列表
-    User->>SeatMapPage: 点击空闲座位
-    SeatMapPage-->>User: 弹出预约时间选择框
+    SeatMapPage->>Axios: GET /api/open-time-config
+    Axios-->>SeatMapPage: 返回开放时间配置
+    User->>SeatMapPage: 点击非停用座位
+    SeatMapPage->>Axios: GET /api/seats/{seat_id}/reservations?date=当天日期
+    Axios->>SeatController: 查询该座位当天有效预约
+    SeatController->>SeatService: get_seat_reservation_periods(seat_id, date)
+    SeatService->>ReservationDAO: find_effective_reservations_by_seat_and_date(seat_id, date)
+    ReservationDAO->>DB: 查询未取消、未过期、未完成的预约时间段
+    DB-->>ReservationDAO: 返回预约时间段
+    ReservationDAO-->>SeatService: 返回 Reservation 列表
+    SeatService-->>SeatController: 返回 start_time/end_time/status
+    SeatController-->>Axios: 返回统一成功 JSON
+    Axios-->>SeatMapPage: 返回今日已预约时间段
+    SeatMapPage-->>User: 弹出预约时间选择框并展示已预约时间段
     User->>SeatMapPage: 选择 start_time 和 end_time
     User->>SeatMapPage: 点击确认
     SeatMapPage->>Axios: POST /api/reservations
     Axios->>Auth: 携带 Bearer Token
     Auth->>ReservationController: 通过校验，设置 current_user
     ReservationController->>ReservationService: create_reservation(user, data)
+    ReservationService->>StudySessionService: auto_release_expired_study_sessions()
+    StudySessionService->>DB: 自动释放超过预约结束时间的学习会话
+    StudySessionService-->>ReservationService: 返回自动释放数量
 
     ReservationService->>OpenTimeDAO: find_open_time_config()
     OpenTimeDAO->>DB: 查询 open_time_config
@@ -95,13 +121,14 @@ sequenceDiagram
     StudySessionDAO->>DB: 查询用户有效学习会话
     DB-->>StudySessionDAO: 返回查询结果
 
-    ReservationService->>ReservationDAO: find_conflicting_reservation(seat_id, start_time, end_time)
-    ReservationDAO->>DB: 查询同座位重叠预约
+    ReservationService->>ReservationDAO: find_conflicting_reservation(seat_id, start_time, end_time, today)
+    ReservationDAO->>DB: 查询同座位当天重叠预约
     DB-->>ReservationDAO: 返回冲突结果
 
     ReservationService->>StudySessionDAO: find_active_session_by_seat(seat_id)
     StudySessionDAO->>DB: 查询座位当前使用情况
     DB-->>StudySessionDAO: 返回查询结果
+    ReservationService->>ReservationService: 如果座位正在使用，继续判断当前学习会话时间段是否与新预约重叠
 
     alt 校验失败
         ReservationService-->>ReservationController: 抛出 BusinessError
@@ -138,6 +165,16 @@ sequenceDiagram
 
     User->>CurrentSeatPage: 打开当前座位页面
     CurrentSeatPage->>Axios: GET /api/study-sessions/me
+    Axios->>StudySessionController: 请求当前学习会话
+    StudySessionController->>StudySessionService: get_my_current_session(user)
+    StudySessionService->>StudySessionService: auto_release_expired_study_sessions()
+    StudySessionService->>DB: 自动释放超过预约结束时间的学习会话
+    StudySessionService->>StudySessionDAO: find_current_session_by_user(user_id)
+    StudySessionDAO->>DB: 查询用户当前学习会话
+    DB-->>StudySessionDAO: 返回查询结果
+    StudySessionDAO-->>StudySessionService: 返回 StudySession 或空
+    StudySessionService-->>StudySessionController: 返回当前学习会话
+    StudySessionController-->>Axios: 返回统一成功 JSON
     Axios-->>CurrentSeatPage: 返回当前学习会话
     User->>CurrentSeatPage: 点击释放座位
     CurrentSeatPage->>Axios: POST /api/study-sessions/{session_id}/release

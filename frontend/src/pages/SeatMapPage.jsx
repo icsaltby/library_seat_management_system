@@ -28,7 +28,7 @@ const zh = {
   title: "\u5ea7\u4f4d\u5730\u56fe",
   subtitle: "\u5ea7\u4f4d\u72b6\u6001\u6bcf 10 \u79d2\u81ea\u52a8\u5237\u65b0\u3002",
   lastUpdate: "\u6700\u540e\u66f4\u65b0",
-  notice: "\u53ea\u6709\u7a7a\u95f2\u5ea7\u4f4d\u53ef\u4ee5\u9884\u7ea6\uff0c\u4e00\u4e2a\u7528\u6237\u540c\u65f6\u53ea\u80fd\u6709\u4e00\u4e2a\u6709\u6548\u9884\u7ea6\u3002",
+  notice: "\u975e\u505c\u7528\u5ea7\u4f4d\u90fd\u53ef\u4ee5\u9009\u62e9\u9884\u7ea6\u65f6\u95f4\uff0c\u7cfb\u7edf\u4f1a\u81ea\u52a8\u68c0\u67e5\u65f6\u95f4\u6bb5\u662f\u5426\u51b2\u7a81\u3002",
   free: "\u7a7a\u95f2",
   reserved: "\u5df2\u9884\u7ea6",
   using: "\u4f7f\u7528\u4e2d",
@@ -49,6 +49,8 @@ const zh = {
   reserveSuccessPrefix: "\u5df2\u9884\u7ea6",
   signBefore: "\u8bf7\u5728\u6b64\u65f6\u95f4\u524d\u7b7e\u5230",
   endAfterStart: "\u7ed3\u675f\u65f6\u95f4\u5fc5\u987b\u665a\u4e8e\u5f00\u59cb\u65f6\u95f4\u3002",
+  todayPeriods: "\u4eca\u65e5\u5df2\u9884\u7ea6\u65f6\u95f4\u6bb5",
+  noTodayPeriods: "\u4eca\u65e5\u6682\u65e0\u5df2\u9884\u7ea6\u65f6\u95f4\u6bb5\u3002",
 };
 
 const statusInfo = {
@@ -56,7 +58,7 @@ const statusInfo = {
   reserved: { label: zh.reserved, className: "seat-reserved", badge: "gold" },
   using: { label: zh.using, className: "seat-using", badge: "red" },
   leaving: { label: zh.leaving, className: "seat-leaving", badge: "orange" },
-  disabled: { label: zh.disabled, className: "seat-disabled", badge: "default" },
+  disabled: { label: zh.disabled, className: "seat-disabled", badge: "default", badgeClassName: "status-disabled-badge" },
 };
 
 function toTodayTime(value) {
@@ -74,6 +76,8 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
   const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
   const [openTimeConfig, setOpenTimeConfig] = useState(DEFAULT_OPEN_TIME_CONFIG);
+  const [reservationPeriods, setReservationPeriods] = useState([]);
+  const [loadingReservationPeriods, setLoadingReservationPeriods] = useState(false);
   const [form] = Form.useForm();
 
   async function loadSeats() {
@@ -94,6 +98,21 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
       setOpenTimeConfig(response.data.data || DEFAULT_OPEN_TIME_CONFIG);
     } catch (error) {
       message.error(getErrorMessage(error));
+    }
+  }
+
+  async function loadSeatReservationPeriods(seatId) {
+    setLoadingReservationPeriods(true);
+    try {
+      const response = await api.get(`/seats/${seatId}/reservations`, {
+        params: { date: dayjs().format("YYYY-MM-DD") },
+      });
+      setReservationPeriods(response.data.data || []);
+    } catch (error) {
+      setReservationPeriods([]);
+      message.error(getErrorMessage(error));
+    } finally {
+      setLoadingReservationPeriods(false);
     }
   }
 
@@ -144,10 +163,12 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
       start_time: startTime,
       end_time: endTime,
     });
+    loadSeatReservationPeriods(seat.id);
   }
 
   function closeReserveModal() {
     setSelectedSeat(null);
+    setReservationPeriods([]);
     form.resetFields();
   }
 
@@ -206,7 +227,7 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
 
       <Space wrap>
         {Object.entries(statusInfo).map(([key, item]) => (
-          <Badge key={key} color={item.badge} text={item.label} />
+          <Badge key={key} className={item.badgeClassName} color={item.badge} text={item.label} />
         ))}
       </Space>
 
@@ -239,14 +260,14 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
             <div className="seat-grid">
               {groupSeats.map((seat) => {
                 const info = statusInfo[seat.status] || statusInfo.disabled;
-                const canReserve = seat.status === "free" && seat.is_enabled;
+                const canReserve = seat.status !== "disabled" && seat.is_enabled;
 
                 return (
                   <div key={seat.id} className={`seat-tile ${info.className}`}>
                     <div>
                       <Text strong>{seat.name}</Text>
                       <div>
-                        <Badge color={info.badge} text={info.label} />
+                        <Badge className={info.badgeClassName} color={info.badge} text={info.label} />
                       </div>
                     </div>
                     <Button
@@ -273,9 +294,28 @@ function SeatMapPage({ refreshFlag, onReservationChanged, onOpenReservation }) {
         onOk={handleReserve}
         confirmLoading={Boolean(reservingSeatId)}
         okText={zh.confirm}
-        cancelText="\u53d6\u6d88"
+        cancelText="取消"
         destroyOnHidden
       >
+        <Space direction="vertical" size="small" className="full-width">
+          <Text strong>{zh.todayPeriods}</Text>
+          {loadingReservationPeriods ? (
+            <Spin size="small" />
+          ) : reservationPeriods.length > 0 ? (
+            <Space wrap>
+              {reservationPeriods.map((reservation) => (
+                <Badge
+                  key={reservation.reservation_id}
+                  status="processing"
+                  text={`${reservation.start_time} - ${reservation.end_time}（${reservation.status}）`}
+                />
+              ))}
+            </Space>
+          ) : (
+            <Text type="secondary">{zh.noTodayPeriods}</Text>
+          )}
+        </Space>
+
         <Form form={form} layout="vertical">
           <Form.Item
             label={zh.startTime}
